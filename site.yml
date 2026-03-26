@@ -1,0 +1,158 @@
+
+- name: Install prerequisites
+  hosts: nodes
+  become: yes
+  tasks:
+    - name: Ensure Go is installed
+ #     ansible.builtin.shell: |
+ #       if ! rpm -q golang >/dev/null 2>&1; then
+ #         dnf install -y golang
+ #       fi
+ #     become: yes
+      ansible.builtin.command:
+        cmd: yum install golang -y
+
+    - name: Ensure rpm-build is installed
+      ansible.builtin.command:
+        cmd: yum install rpm-build -y
+
+    - name: Ensure git is installed
+      ansible.builtin.command:
+        cmd: yum install git -y
+
+- name: Create rpmbuild directory structure
+  hosts: nodes
+  become: false
+
+  tasks:
+    - name: Create top-level rpmbuild directories
+      ansible.builtin.file:
+        path: "{{ rpmbuild_home }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - BUILD
+        - RPMS
+        - SOURCES
+        - SPECS
+        - SRPMS
+
+    - name: Create exporter source subdirectories
+      ansible.builtin.file:
+        path: "{{ rpmsource_base }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - usr/bin
+        - etc/default
+        - usr/lib/systemd/system
+
+
+- name: Build Cluster Exporter files
+  hosts: nodes
+  become: false
+
+  tasks:
+    - name: Clone Cluster Exporter repository
+      ansible.builtin.git:
+        repo: "{{ repo_path }}"
+        dest: "{{ source_path }}"
+        version: "main"
+        force: yes
+        update: yes
+
+    - name: Build Cluster Exporter binary
+      ansible.builtin.command:
+        cmd: go build -o {{ source_path }}/prometheus-cluster-exporter
+        chdir: "{{ source_path }}"
+##  optional: static linking
+##	cmd: CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' -o {{ source_path }}/prometheus-cluster-exporter
+
+- name: Copy Cluster Exporter files
+  hosts: nodes
+  become: false
+
+  tasks:
+    - name: Copy binary
+      ansible.builtin.copy:
+        src: "{{ source_path }}/prometheus-cluster-exporter"
+        dest: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}/usr/bin/prometheus-cluster-exporter"
+        mode: '0755'
+        remote_src: yes
+
+    - name: Copy default options file
+      ansible.builtin.copy:
+        src: "{{ source_path }}/systemd/prometheus-cluster-exporter.options"
+        dest: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}/etc/default/prometheus-cluster-exporter.options"
+        mode: '0644'
+        remote_src: yes
+
+    - name: Copy systemd service file
+      ansible.builtin.copy:
+        src: "{{ source_path }}/systemd/prometheus-cluster-exporter.service"
+        dest: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}/usr/lib/systemd/system/prometheus-cluster-exporter.service"
+        mode: '0644'
+        remote_src: yes
+
+    - name: Copy SPEC file
+      ansible.builtin.copy:
+        src: "{{ source_path }}/rpm/prometheus-cluster-exporter.spec"
+        dest: "{{ rpmbuild_home }}/SPECS/prometheus-cluster-exporter.spec"
+        mode: '0644'
+        remote_src: yes
+
+- name: Update spec file and options file
+  hosts: nodes
+  become: false
+  tasks:
+    - name: Set Name in spec file
+      ansible.builtin.replace:
+        path: "{{ rpmbuild_home }}/SPECS/prometheus-cluster-exporter.spec"
+        regexp: '^Name:\s+.*'
+        replace: "Name:           {{ exporter_name }}"
+
+    - name: Set Version in spec file
+      ansible.builtin.replace:
+        path: "{{ rpmbuild_home }}/SPECS/prometheus-cluster-exporter.spec"
+        regexp: '^Version:\s+.*'
+        replace: "Version:        {{ exporter_version }}"
+    
+    - name: Set Prometheus server and port in options
+      ansible.builtin.lineinfile:
+        path: "{{ source_path }}/systemd/prometheus-cluster-exporter.options"
+        regexp: '^OPTIONS='
+        line: 'OPTIONS="--promserver={{ prom_server }} --port={{ listen_port }}"'
+        backrefs: yes
+    
+- name: Build RPM package
+  hosts: nodes
+  become: false
+
+  tasks:
+    - name: Create tar.gz
+      ansible.builtin.archive:
+        path: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}"
+        dest: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}.tar.gz"
+        format: gz
+
+    - name: Create RPM package
+      ansible.builtin.command:
+        cmd: rpmbuild -ba {{ rpmbuild_home }}/SPECS/prometheus-cluster-exporter.spec
+
+- name: Copy built RPMs to local host
+  hosts: nodes
+  become: false
+  tasks:
+    - name: Find all RPM files in rpmbuild_home
+      ansible.builtin.find:
+        paths: "{{ rpmbuild_home }}"
+        patterns: "*.rpm"
+        recurse: yes
+      register: rpm_files
+
+    - name: Fetch RPM files to local host
+      ansible.builtin.fetch:
+        src: "{{ item.path }}"
+        dest: "./rpms/"   # local folder on your host where files will be copied
+        flat: yes         # don't preserve remote folder structure
+      loop: "{{ rpm_files.files }}"

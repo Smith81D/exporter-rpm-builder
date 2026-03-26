@@ -1,0 +1,18 @@
+# group_vars/all.yml
+
+exporter_name: "prometheus-cluster-exporter"
+exporter_version: "1.1.8"
+exporter_label: "{{ exporter_name }}-{{ exporter_version }}"
+
+repo_path: "https://github.com/GSI-HPC/prometheus-cluster-exporter.git"
+
+prom_server: "http://prometheus.hpc.gsi.de:9090"
+listen_port: "9846"
+
+source_path: "{{ ansible_env.HOME }}/prometheus-cluster-exporter" 
+rpmbuild_home: "{{ ansible_env.HOME }}/rpmbuild"
+rpmsource_base: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}"
+
+
+
+
