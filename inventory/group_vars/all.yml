@@ -9,9 +9,8 @@ repo_path: "https://github.com/GSI-HPC/prometheus-cluster-exporter.git"
 prom_server: "http://prometheus.hpc.gsi.de:9090"
 listen_port: "9846"
 
-source_path: "{{ ansible_env.HOME }}/prometheus-cluster-exporter" 
+source_path: "{{ ansible_env.HOME }}/{{ exporter_label }}" 
 rpmbuild_home: "{{ ansible_env.HOME }}/rpmbuild"
-rpmsource_base: "{{ rpmbuild_home }}/SOURCES/{{ exporter_label }}"
 
 
 
