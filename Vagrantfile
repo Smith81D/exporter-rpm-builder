@@ -12,8 +12,8 @@ Vagrant.configure("2") do |config|
 
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://vagrantcloud.com/search.
-  #config.vm.box = "cloud-image/fedora-43"
-  config.vm.box = "cloud-image/rocky-8"
+  config.vm.box = "cloud-image/fedora-43"
+ # config.vm.box = "cloud-image/rocky-8"
 
   # Helper to set RAM & CPUs
   def configure_resources(vm_config)
@@ -27,14 +27,14 @@ Vagrant.configure("2") do |config|
   config.vm.define "RpmBox" do |vm|
     vm.vm.hostname = "RpmBox"
   
-    # Main IP for Ansible/SSH
-    vm.vm.network "private_network", ip: "192.168.56.3"
-  
     configure_resources(vm)
   
-    # Forward custom port (optional)
-    # vm.vm.network "forwarded_port", guest: 19391, host: 19391, auto_correct: true, host_ip: "127.0.0.1"
-  
+    # Disable auto network config (use SSH forwarding)
+    vm.vm.network "private_network", type: "dhcp", auto_config: false
+
+    # Forward SSH port so host can connect via localhost
+    vm.vm.network "forwarded_port", guest: 22, host: 2222, auto_correct: true
+
     # Provision with Ansible
     vm.vm.provision "ansible" do |ansible|
       ansible.playbook = "site.yml"

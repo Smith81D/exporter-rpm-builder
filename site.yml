@@ -7,10 +7,6 @@
       ansible.builtin.command:
         cmd: yum install golang -y
 
-    - name: Ensure Go RPM macros is installed
-      ansible.builtin.command:
-        cmd: yum install go-rpm-macros -y
-
     - name: Ensure rpm-build is installed
       ansible.builtin.command:
         cmd: yum install rpm-build -y
